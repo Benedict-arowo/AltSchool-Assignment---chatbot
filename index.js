@@ -224,7 +224,7 @@ server.listen(PORT, () => {
 	console.log(`listening on *:${PORT}`);
 });
 
-cron.schedule("*/1 * * * *", () => {
+cron.schedule("*/10 * * * *", () => {
 	// Clear the orders array every day at midnight.
 	console.log("Clearing all orders that are older than 30 minutes");
 	const now = new Date().getTime();
