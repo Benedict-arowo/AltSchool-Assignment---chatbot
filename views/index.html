@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>THE FOOD ORDERING CENTER</title>
+		<script src="/socket.io/socket.io.js"></script>
+
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+				font-family: sans-serif;
+			}
+
+			body {
+				height: 100vh;
+			}
+
+			html {
+				scroll-behavior: smooth;
+			}
+
+			#username {
+				color: #0382f2;
+			}
+
+			#mainMenu {
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				flex-direction: column;
+				width: 100%;
+				height: 100vh;
+
+				& div {
+					display: flex;
+					flex-direction: column;
+					margin-top: 24px;
+					gap: 8px;
+					text-align: center;
+					min-width: 250px;
+
+					p {
+						font-size: 12px;
+						font-weight: 400;
+						font-style: italic;
+						color: #333;
+					}
+
+					& input {
+						padding: 6px 8px;
+						border-radius: 3px;
+						/* border-right: none;
+						outline: none; */
+					}
+
+					& button:disabled {
+						cursor: not-allowed;
+						opacity: 0.5;
+						pointer-events: none;
+					}
+
+					& button {
+						/* border-left: none; */
+						cursor: pointer;
+						width: fit-content;
+						margin: 0 auto;
+						padding: 6px 16px;
+						transition: all 0.5s;
+					}
+				}
+			}
+
+			#chatMenu {
+				height: 100%;
+				width: 100%;
+				display: flex;
+				flex-direction: column;
+				gap: 24px;
+				padding: 12px 12px 4px;
+
+				& > section {
+					display: flex;
+					flex-direction: row;
+					justify-content: space-between;
+					gap: 12px;
+					align-items: center;
+
+					& svg {
+						cursor: pointer;
+						transition: all 0.5s;
+					}
+
+					& svg:hover {
+						transform: scale(1.1);
+					}
+				}
+
+				& form {
+					display: flex;
+					justify-content: start;
+					width: 100%;
+					flex-direction: row;
+					overflow: hidden;
+					border-radius: 3px;
+					min-height: fit-content;
+					border: 2px solid black;
+
+					& input {
+						width: 100%;
+						outline: none;
+						border: none;
+						font-size: 1.2rem;
+						padding: 8px;
+					}
+
+					& button:disabled {
+						cursor: not-allowed;
+						opacity: 0.5;
+						pointer-events: none;
+					}
+
+					& button {
+						outline: none;
+						border: none;
+						font-weight: 700;
+						cursor: pointer;
+						width: fit-content;
+						padding: 6px 16px;
+						transition: all 0.5s;
+					}
+
+					& button:hover {
+						background-color: #0382f2;
+						color: white;
+					}
+				}
+			}
+
+			#messageContainer {
+				height: 100%;
+				width: 100%;
+				gap: 8px;
+				display: flex;
+				flex-direction: column;
+				overflow-y: auto;
+
+				& .botMessageItem {
+					background-color: aliceblue;
+					padding: 8px 12px;
+					width: fit-content;
+					border-radius: 16px;
+					max-width: 300px;
+				}
+
+				& .userMessageItem {
+					background-color: #0382f2;
+					max-width: 300px;
+					padding: 8px 12px;
+					width: fit-content;
+					border-radius: 16px;
+					color: white;
+					align-self: flex-end;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main id="mainMenu">
+			<h1 id="welcome">Welcome ______</h1>
+			<div>
+				<p>Please enter your name to continue</p>
+				<input type="text" name="name" id="name" />
+				<button disabled id="continueButton" type="submit">
+					Continue
+				</button>
+			</div>
+		</main>
+
+		<section id="chatMenu">
+			<div id="messageContainer">
+				<div id="greeting" class="botMessageItem"></div>
+			</div>
+			<section>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					id="logoutButton"
+					viewBox="0 0 24 24"
+					stroke-width="1.5"
+					stroke="currentColor"
+					height="24px"
+					class="size-6">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+				</svg>
+
+				<form action="" id="form">
+					<input type="text" placeholder="" />
+					<button id="sendButton" type="submit">Send</button>
+				</form>
+			</section>
+		</section>
+	</body>
+	<script>
+		const socket = io();
+		const messageContainer = document.getElementById("messageContainer");
+		const form = document.getElementById("form");
+		const mainContainer = document.getElementById("mainMenu");
+		const chatContainer = document.getElementById("chatMenu");
+		const welcomeElement = document.getElementById("welcome");
+		const nameInput = document.getElementById("name");
+		const continueButton = document.getElementById("continueButton");
+		const sendButton = document.getElementById("sendButton");
+		const greetingElement = document.getElementById("greeting");
+		const logoutElement = document.getElementById("logoutButton");
+		const typingElement = document.getElementById("typingElement");
+
+		let username;
+		let curMode = "menu";
+
+		form.addEventListener("submit", (e) => {
+			e.preventDefault();
+
+			const inputElement = form.getElementsByTagName("input")[0];
+			if (inputElement.value.length === 0) return;
+
+			// Show the message on screen
+			addMessage({ content: inputElement.value, isBot: false });
+			// Emit the message to the backend.
+			socket.emit("message", {
+				value: inputElement.value,
+				mode: curMode,
+				username,
+			});
+			inputElement.value = "";
+		});
+
+		const addMessage = ({ content, isBot }) => {
+			const message = document.createElement("div");
+			message.classList.add(isBot ? "botMessageItem" : "userMessageItem");
+			message.innerText = content;
+			messageContainer.appendChild(message);
+
+			messageContainer.scrollTo({
+				top: messageContainer.scrollHeight,
+				behavior: "smooth",
+			});
+		};
+
+		logoutElement.addEventListener("click", () => {
+			localStorage.removeItem("username");
+			nameInput.value = "";
+			mainContainer.style.display = "flex";
+			chatContainer.style.display = "none";
+		});
+
+		document.addEventListener("DOMContentLoaded", () => {
+			const storedUsername = localStorage.getItem("username");
+			if (storedUsername) {
+				username = storedUsername;
+				greetingElement.innerHTML = `Welcome to <strong>THE FOOD ORDERING CENTER</strong>, ${username}!`;
+				mainContainer.style.display = "none";
+			}
+		});
+		// Handles updating username
+		nameInput.addEventListener("keyup", (e) => {
+			if (e.target.value.length > 0) {
+				welcomeElement.innerHTML = `Welcome <span id="username">${e.target.value}</span>!`;
+				continueButton.removeAttribute("disabled");
+			} else {
+				welcomeElement.innerText = `Welcome ______`;
+				continueButton.setAttribute("disabled", "true");
+			}
+		});
+
+		continueButton.addEventListener("click", () => {
+			if (nameInput.value.length == 0) return;
+			username = nameInput.value;
+			localStorage.setItem("username", username);
+
+			mainContainer.style.display = "none";
+			chatContainer.style.display = "flex";
+			socket.emit("menu", "test");
+		});
+
+		socket.on("mode", (mode) => {
+			curMode = mode;
+		});
+
+		socket.on("connected", (msg) => {
+			addMessage({ content: msg, isBot: true });
+		});
+
+		socket.on("message", (msg) => {
+			addMessage({ content: msg, isBot: true });
+		});
+	</script>
+</html>
